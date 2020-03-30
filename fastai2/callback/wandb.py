@@ -6,9 +6,16 @@ __all__ = ['WandbCallback', 'wandb_process']
 from ..basics import *
 from .progress import *
 from ..text.data import TensorText
+from .hook import total_params
 
 # Cell
 import wandb
+
+# Cell
+def _try_set(d:dict, key, val):
+    "try to set wandb config key if val is available"
+    try: d[key]=val
+    except: print(f'Could not set wandb config "{key}"')
 
 # Cell
 class WandbCallback(Callback):
@@ -18,18 +25,22 @@ class WandbCallback(Callback):
     _wandb_watch_called = False
 
     def __init__(self, log="gradients", log_preds=True, valid_dl=None, n_preds=36, seed=12345):
-        # W&B log step (number of training updates)
-        self._wandb_step = 0
-        self._wandb_epoch = 0
         # Check if wandb.init has been called
         if wandb.run is None:
             raise ValueError('You must call wandb.init() before WandbCallback()')
+        # W&B log step
+        self._wandb_step = wandb.run.step  # 0 except if the run has previously logged data
+        self._wandb_epoch = 0 if not(wandb.run.step) else math.ceil(wandb.run.summary['epoch']) # continue to next epoch
         store_attr(self, 'log,log_preds,valid_dl,n_preds,seed')
 
     def begin_fit(self):
         "Call watch method to log model topology, gradients & weights"
         self.run = not hasattr(self.learn, 'lr_finder') and not hasattr(self, "gather_preds") and rank_distrib()==0
         if not self.run: return
+
+        # Log config parameters
+        self._log_config()
+
         if not WandbCallback._wandb_watch_called:
             WandbCallback._wandb_watch_called = True
             # Logs model topology and optionally gradients and weights
@@ -54,7 +65,7 @@ class WandbCallback(Callback):
             self._wandb_step += 1
             self._wandb_epoch += 1/self.n_iter
             hypers = {f'{k}_{i}':v for i,h in enumerate(self.opt.hypers) for k,v in h.items()}
-            wandb.log({'epoch': self._wandb_epoch,'train_loss': self.smooth_loss, **hypers}, step=self._wandb_step)
+            wandb.log({'epoch': self._wandb_epoch, 'train_loss': self.smooth_loss, 'raw_loss': self.loss, **hypers}, step=self._wandb_step)
 
     def after_epoch(self):
         "Log validation loss and custom metrics & log prediction samples"
@@ -72,7 +83,36 @@ class WandbCallback(Callback):
     def after_fit(self):
         self.run = True
         if self.log_preds: self.remove_cb(self.learn.fetch_preds)
-        wandb.log({}) #To trigger one last synch
+
+    def _log_config(self):
+        "Log configuration parameters"
+        config={}
+
+        # log callbacks
+        try: config={f'{cb}':True for cb in self.cbs}
+        except: print(f'Could not set wandb config callbacks')
+
+        # log input dimensions
+        try:
+            xb = self.dls.train.one_batch()[:self.dls.train.n_inp]
+            config.update({f'input dim {i}':d for i,d in enumerate(list(detuplify(xb).shape))})
+        except: print(f'Could not set wandb config input dimensions')
+        _try_set(config, 'batch size', self.dls.bs)
+        _try_set(config, 'batch per epoch', len(self.dls.train))
+        _try_set(config, 'model', self.model.__class__.__name__)
+        _try_set(config, 'model parameters', total_params(self.model)[0])
+        _try_set(config, 'loss function', f'{self.loss_func}')
+        _try_set(config, 'device', self.dls.device.type)
+        _try_set(config, 'optimizer', self.opt_func.__name__)
+        _try_set(config, 'frozen', bool(self.opt.frozen_idx))
+        _try_set(config, 'frozen idx', self.opt.frozen_idx)
+        _try_set(config, 'dataset.tfms', f'{self.dls.dataset.tfms}')
+        _try_set(config, 'dls.after_item', f'{self.dls.after_item}')
+        _try_set(config, 'dls.before_batch', f'{self.dls.before_batch}')
+        _try_set(config, 'dls.after_batch', f'{self.dls.after_batch}')
+
+        wandb.config.update(config, allow_val_change=True) # in case callback runs multiple times
+
 
 # Cell
 @typedispatch
