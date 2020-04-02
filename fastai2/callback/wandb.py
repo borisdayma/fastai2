@@ -19,8 +19,9 @@ def _try_set(d:dict, key, val):
     except: print(f'Could not set wandb config "{key}"')
 
 # Cell
-def log_args(f, to_return=False, but='self'):
-    "Decorator to log function args in 'to.params_init'"
+def log_args(f, to_return=False, but=''):
+    "Decorator to log function args in 'to.init_args'"
+    but = but.split(',') + ['self']
     class_name, func_name = f.__qualname__.split('.') if '.' in f.__qualname__ else (None, f.__qualname__)
     assert not inspect.isclass(f), f'Please use @log_args on {class_name}.__init__ instead of {class_name}'
     @wraps(f)
@@ -29,12 +30,12 @@ def log_args(f, to_return=False, but='self'):
         args_insp = args[1:] if func_name=='__init__' else args
         func_args = inspect.signature(f_insp).bind(*args_insp, **kwargs)
         func_args.apply_defaults()
-        log = {k:v for k,v in func_args.arguments.items() if k not in but.split(',')}
+        log = {f'{f.__qualname__}.{k}':v for k,v in func_args.arguments.items() if k not in but}
         return_val = f(*args, **kwargs)
         inst = return_val if to_return else args[0]
-        params_init = getattr(inst, 'params_init', {})
-        params_init.update(log)
-        setattr(inst, 'params_init', params_init)
+        init_args = getattr(inst, 'init_args', {})
+        init_args.update(log)
+        setattr(inst, 'init_args', init_args)
         return return_val
     return _f
 
