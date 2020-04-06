@@ -279,9 +279,32 @@ class Learner():
         return self
 
     def gather_args(self):
+        # init_args
         cb_args = {k:v for cb in self.cbs for k,v in getattr(cb,'init_args',{}).items()}
         args = {**getattr(self,'init_args',{}), **cb_args, **getattr(self.dls,'init_args',{}),
                 **getattr(self.opt,'init_args',{}), **getattr(self.loss_func,'init_args',{})}
+        # callbacks used
+        args.update({f'{cb}':True for cb in self.cbs})
+        # input dimensions
+        try:
+            n_inp = self.dls.train.n_inp
+            args['n_inp'] = n_inp
+            xb = self.dls.train.one_batch()[:n_inp]
+            args.update({f'input dim {i}':d for i,d in enumerate(list(detuplify(xb).shape))})
+        except: print(f'Could not gather input dimensions')
+        # other useful information
+        with ignore_exceptions(): args['batch size'] = self.dls.bs
+        with ignore_exceptions(): args['batch per epoch'] = len(self.dls.train)
+        with ignore_exceptions(): args['model parameters'] = total_params(self.model)[0]
+        with ignore_exceptions(): args['loss function'] = f'{self.loss_func}'
+        with ignore_exceptions(): args['device'] = self.dls.device.type
+        with ignore_exceptions(): args['optimizer'] = self.opt_func.__name__
+        with ignore_exceptions(): args['frozen'] = bool(self.opt.frozen_idx)
+        with ignore_exceptions(): args['frozen idx'] = self.opt.frozen_idx
+        with ignore_exceptions(): args['dataset.tfms'] = f'{self.dls.dataset.tfms}'
+        with ignore_exceptions(): args['dls.after_item'] = f'{self.dls.after_item}'
+        with ignore_exceptions(): args['dls.before_batch'] = f'{self.dls.before_batch}'
+        with ignore_exceptions(): args['dls.after_batch'] = f'{self.dls.after_batch}'
         return args
 
 Learner.x,Learner.y = add_props(lambda i,x: detuplify((x.xb,x.yb)[i]))
