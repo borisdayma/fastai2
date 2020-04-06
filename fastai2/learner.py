@@ -71,7 +71,7 @@ _before_epoch = [event.begin_fit, event.begin_epoch]
 _after_epoch  = [event.after_epoch, event.after_fit]
 
 # Cell
-@log_args(but='dls,model,opt_func')
+@log_args(but='dls,model,opt_func,cbs')
 class Learner():
     def __init__(self, dls, model, loss_func=None, opt_func=Adam, lr=defaults.lr, splitter=trainable_params, cbs=None,
                  metrics=None, path=None, model_dir='models', wd=None, wd_bn_bias=False, train_bn=True,
