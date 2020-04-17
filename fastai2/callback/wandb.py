@@ -36,21 +36,12 @@ class WandbCallback(Callback):
         # Log config parameters
         log_config = self.learn.gather_args()
         _format_config(log_config)
-        for k,v in log_config.items():
-            if callable(v) and hasattr(v,'__qualname__') and hasattr(v,'__module__'): v = f'{v.__module__}.{v.__qualname__}'
-            try:
-                wandb.config[k] = v
-            except ConfigError:
-                # parameter already set manually or from previous `fit` -> do not overwrite
-                pass
-            except:
-                try:
-                    # maybe type not supported
-                    wandb.config.update({k:str(v)}, allow_val_change=True)
-                except:
-                    # just remove the parameter if it exists to let config sync
-                    wandb.config._items.pop(k, None)
-                    print(f"Unexpected error while setting wandb.config['{k}']")
+        try:
+            # Log all parameters at once
+            wandb.config.update(log_config, allow_val_change=True)
+        except Exception as e:
+            print(f'WandbCallback could not log all parameters at once and will log them one at a time -> {e}')
+            _log_config_separately(log_config)
 
         if not WandbCallback._wandb_watch_called:
             WandbCallback._wandb_watch_called = True
@@ -117,6 +108,21 @@ def _format_config(log_config):
             if hasattr(v,'__qualname__') and hasattr(v,'__module__'): log_config[k] = f'{v.__module__}.{v.__qualname__}'
             else: log_config[k] = str(v)
         if isinstance(v, slice): log_config[k] = dict(slice_start=v.start, slice_step=v.step, slice_stop=v.stop)
+
+# Cell
+def _log_config_separately(log_config):
+    "Log as many config parameters as possible"
+    for k,v in log_config.items():
+        try:
+            wandb.config.update({k:v}, allow_val_change=True)
+        except:
+            try:
+                # maybe type not supported
+                wandb.config.update({k:str(v)}, allow_val_change=True)
+            except:
+                # just remove the parameter if it exists to let config sync
+                wandb.config._items.pop(k, None)
+                print(f"Unexpected error while setting wandb.config['{k}']")
 
 # Cell
 @typedispatch
