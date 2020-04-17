@@ -151,6 +151,20 @@ def wandb_process(x:TensorImage, y, samples, outs):
 
 # Cell
 @typedispatch
+def wandb_process(x:TensorImage, y:TensorMask, samples, outs):
+    res = []
+    class_labels = {i:f'{c}' for i,c in enumerate(y.get_meta('codes'))} if y.get_meta('codes') is not None else None
+    for s,o in zip(samples, outs):
+        img = s[0].permute(1,2,0)
+        masks = {}
+        for t, capt in ((o[0], "Prediction"), (s[1], "Ground Truth")):
+            masks[capt] = {'mask_data':t.numpy()}
+            if class_labels: masks[capt]['class_labels'] = class_labels
+        res.append(wandb.Image(img, masks=masks))
+    return {"Prediction Samples":res}
+
+# Cell
+@typedispatch
 def wandb_process(x:TensorImage, y:(TensorCategory,TensorMultiCategory), samples, outs):
     return {"Prediction Samples": [wandb.Image(s[0].permute(1,2,0), caption=f'Ground Truth: {s[1]}\nPrediction: {o[0]}')
             for s,o in zip(samples,outs)]}
