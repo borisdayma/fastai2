@@ -35,6 +35,7 @@ class WandbCallback(Callback):
 
         # Log config parameters
         log_config = self.learn.gather_args()
+        _format_config(log_config)
         for k,v in log_config.items():
             if callable(v) and hasattr(v,'__qualname__') and hasattr(v,'__module__'): v = f'{v.__module__}.{v.__qualname__}'
             try:
@@ -50,7 +51,6 @@ class WandbCallback(Callback):
                     # just remove the parameter if it exists to let config sync
                     wandb.config._items.pop(k, None)
                     print(f"Unexpected error while setting wandb.config['{k}']")
-        #wandb.config.update({})
 
         if not WandbCallback._wandb_watch_called:
             WandbCallback._wandb_watch_called = True
@@ -108,6 +108,15 @@ def _make_plt(img):
     ax.set_axis_off()
     fig.add_axes(ax)
     return fig, ax
+
+# Cell
+def _format_config(log_config):
+    "Format config parameters before logging them"
+    for k,v in log_config.items():
+        if callable(v):
+            if hasattr(v,'__qualname__') and hasattr(v,'__module__'): log_config[k] = f'{v.__module__}.{v.__qualname__}'
+            else: log_config[k] = str(v)
+        if isinstance(v, slice): log_config[k] = dict(slice_start=v.start, slice_step=v.step, slice_stop=v.stop)
 
 # Cell
 @typedispatch
