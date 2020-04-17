@@ -50,16 +50,20 @@ class WandbCallback(Callback):
 
         if hasattr(self, 'save_model'): self.save_model.add_save = Path(wandb.run.dir)/'bestmodel.pth'
 
-        if self.log_preds and not self.valid_dl:
-            #Initializes the batch watched
-            wandbRandom = random.Random(self.seed)  # For repeatability
-            self.n_preds = min(self.n_preds, len(self.dls.valid_ds))
-            idxs = wandbRandom.sample(range(len(self.dls.valid_ds)), self.n_preds)
-            test_items = [self.dls.valid_ds.items[i] for i in idxs]
-            self.valid_dl = self.dls.test_dl(test_items, with_labels=True)
+        if self.log_preds:
+            try:
+                if not self.valid_dl:
+                    #Initializes the batch watched
+                    wandbRandom = random.Random(self.seed)  # For repeatability
+                    self.n_preds = min(self.n_preds, len(self.dls.valid_ds))
+                    idxs = wandbRandom.sample(range(len(self.dls.valid_ds)), self.n_preds)
+                    test_items = [self.dls.valid_ds.items[i] for i in idxs]
+                    self.valid_dl = self.dls.test_dl(test_items, with_labels=True)
 
-        if self.valid_dl:
-            self.learn.add_cb(FetchPredsCallback(dl=self.valid_dl, with_input=True, with_decoded=True))
+                self.learn.add_cb(FetchPredsCallback(dl=self.valid_dl, with_input=True, with_decoded=True))
+            except Exception as e:
+                self.log_preds = False
+                print(f'WandbCallback was not able to prepare a DataLoader for logging prediction samples -> {e}')
 
     def after_batch(self):
         "Log hyper-parameters and training loss"
@@ -76,10 +80,14 @@ class WandbCallback(Callback):
         wandb.log({'epoch': self._wandb_epoch}, step=self._wandb_step)
         # Log sample predictions
         if self.log_preds:
-            inp,preds,targs,out = self.learn.fetch_preds.preds
-            b = tuplify(inp) + tuplify(targs)
-            x,y,its,outs = self.valid_dl.show_results(b, out, show=False, max_n=self.n_preds)
-            wandb.log(wandb_process(x, y, its, outs), step=self._wandb_step)
+            try:
+                inp,preds,targs,out = self.learn.fetch_preds.preds
+                b = tuplify(inp) + tuplify(targs)
+                x,y,its,outs = self.valid_dl.show_results(b, out, show=False, max_n=self.n_preds)
+                wandb.log(wandb_process(x, y, its, outs), step=self._wandb_step)
+            except Exception as e:
+                self.log_preds = False
+                print(f'WandbCallback was not able to get prediction samples -> {e}')
         wandb.log({n:s for n,s in zip(self.recorder.metric_names, self.recorder.log) if n not in ['train_loss', 'epoch', 'time']}, step=self._wandb_step)
 
     def after_fit(self):
