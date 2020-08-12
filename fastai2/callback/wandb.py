@@ -140,6 +140,9 @@ def _format_metadata(metadata):
 # Cell
 def log_dataset(path=None, name=None):
     "Log dataset folder"
+    # Check if wandb.init has been called in case datasets are logged manually
+    if wandb.run is None:
+        raise ValueError('You must call wandb.init() before log_dataset()')
     name = ifnone(name, path.name)
     metadata={'path':path}
     with ignore_exceptions(): metadata['path'] = Path('~') / metadata['path'].relative_to(Path.home())  # make path relative to home
