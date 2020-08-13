@@ -145,7 +145,7 @@ def log_dataset(path=None, name=None, learner_path=None):
         raise ValueError('You must call wandb.init() before log_dataset()')
     name = ifnone(name, path.name)
     metadata = dict()
-    with ignore_exceptions(): metadata['path relative to learner'] = path.relative_to(Path(learner_path))  # make path relative to home
+    if learner_path is not None: metadata['path relative to learner'] = os.path.relpath(path, learner_path)
     _format_metadata(metadata)
     artifact_dataset = wandb.Artifact(name=name, type='dataset', description="raw dataset", metadata=metadata)
     # log everything except "models" folder
