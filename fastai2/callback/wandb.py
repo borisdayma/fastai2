@@ -58,7 +58,7 @@ class WandbCallback(Callback):
         if self.log_dataset:
             self.log_dataset = Path(self.log_dataset)
             assert self.log_dataset.is_dir(), f'log_dataset must be a directory: {self.log_dataset}'
-            log_dataset(path=self.log_dataset, name=self.dataset_name)
+            log_dataset(path=self.log_dataset, name=self.dataset_name, learner_path=self.learn.path)
 
         if hasattr(self, 'save_model'): self.save_model.add_save = Path(wandb.run.dir)/'bestmodel.pth'
 
@@ -138,14 +138,14 @@ def _format_metadata(metadata):
     for k,v in metadata.items(): metadata[k] = str(v)
 
 # Cell
-def log_dataset(path=None, name=None):
+def log_dataset(path=None, name=None, learner_path=None):
     "Log dataset folder"
     # Check if wandb.init has been called in case datasets are logged manually
     if wandb.run is None:
         raise ValueError('You must call wandb.init() before log_dataset()')
     name = ifnone(name, path.name)
-    metadata={'path':path}
-    with ignore_exceptions(): metadata['path'] = Path('~') / metadata['path'].relative_to(Path.home())  # make path relative to home
+    metadata = dict()
+    with ignore_exceptions(): metadata['path relative to learner'] = path.relative_to(Path(learner_path))  # make path relative to home
     _format_metadata(metadata)
     artifact_dataset = wandb.Artifact(name=name, type='dataset', description="raw dataset", metadata=metadata)
     # log everything except "models" folder
